@@ -20,11 +20,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        const participantsHtml = details.participants && details.participants.length > 0
+          ? `<div class="participants"><strong>Participants (${details.participants.length}):</strong><ul class="participants-list">${details.participants.map(p => `<li data-email="${p}"><span class="participant-email">${p}</span><button class="remove-participant" data-email="${p}" title="Remove participant">✕</button></li>`).join('')}</ul></div>`
+          : `<div class="participants empty"><em>No participants yet</em></div>`;
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <p class="description">${details.description}</p>
+          <p class="schedule"><strong>Schedule:</strong> ${details.schedule}</p>
+          <p class="availability"><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHtml}
         `;
 
         activitiesList.appendChild(activityCard);
@@ -34,6 +39,60 @@ document.addEventListener("DOMContentLoaded", () => {
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
+
+        // Attach remove handlers for this card
+        const removeButtons = activityCard.querySelectorAll('.remove-participant');
+        removeButtons.forEach((btn) => {
+          btn.addEventListener('click', async (event) => {
+            event.preventDefault();
+            const email = btn.dataset.email;
+            try {
+              const response = await fetch(
+                `/activities/${encodeURIComponent(name)}/participants?email=${encodeURIComponent(email)}`,
+                { method: 'DELETE' }
+              );
+
+              const result = await response.json();
+
+              if (response.ok) {
+                // Remove the participant from the DOM
+                const li = btn.closest('li');
+                if (li) li.remove();
+
+                // Update participants count and availability
+                const participantsDiv = activityCard.querySelector('.participants');
+                const remainingItems = activityCard.querySelectorAll('.participants-list li').length;
+                if (remainingItems === 0) {
+                  participantsDiv.classList.add('empty');
+                  participantsDiv.innerHTML = '<em>No participants yet</em>';
+                } else {
+                  participantsDiv.classList.remove('empty');
+                  const strong = participantsDiv.querySelector('strong');
+                  if (strong) strong.textContent = `Participants (${remainingItems}):`;
+                }
+
+                const availabilityEl = activityCard.querySelector('.availability');
+                const spotsLeftNew = details.max_participants - remainingItems;
+                if (availabilityEl) availabilityEl.innerHTML = `<strong>Availability:</strong> ${spotsLeftNew} spots left`;
+
+                // Show success message
+                messageDiv.textContent = result.message;
+                messageDiv.className = 'success';
+                messageDiv.classList.remove('hidden');
+                setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+              } else {
+                messageDiv.textContent = result.detail || 'Failed to remove participant';
+                messageDiv.className = 'error';
+                messageDiv.classList.remove('hidden');
+              }
+            } catch (error) {
+              messageDiv.textContent = 'Failed to remove participant.';
+              messageDiv.className = 'error';
+              messageDiv.classList.remove('hidden');
+              console.error('Error removing participant:', error);
+            }
+          });
+        });
       });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
